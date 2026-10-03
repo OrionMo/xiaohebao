@@ -1,0 +1,20 @@
+{
+  "name": "小荷包 · 学生理财",
+  "short_name": "小荷包",
+  "description": "记录每月支出去向，守住大学生活费预算。",
+  "lang": "zh-CN",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f5f8fc",
+  "theme_color": "#f5f8fc",
+  "icons": [
+    {
+      "src": "./app-icon.png",
+      "sizes": "1254x1254",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
