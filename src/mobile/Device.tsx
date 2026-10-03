@@ -50,8 +50,16 @@ type MobileDeviceContextValue = {
 
 const MobileDeviceContext = createContext<MobileDeviceContextValue | null>(null);
 
+function getInitialDeviceId(): MobileDeviceId {
+  if (typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent)) {
+    return "pixel-10";
+  }
+
+  return "iphone";
+}
+
 export function MobileDeviceProvider({ children }: PropsWithChildren) {
-  const [deviceId, setDeviceId] = useState<MobileDeviceId>("iphone");
+  const [deviceId, setDeviceId] = useState<MobileDeviceId>(getInitialDeviceId);
   const value = useMemo(
     () => ({ device: mobileDevices[deviceId], deviceId, setDeviceId }),
     [deviceId],

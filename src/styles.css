@@ -64,6 +64,46 @@ button {
   padding: 24px;
 }
 
+.phone-stage[data-native-viewport="true"] {
+  display: block;
+  width: 100dvw;
+  height: 100dvh;
+  padding: 0;
+  overflow: hidden;
+}
+
+.phone-stage[data-native-viewport="true"] .phone-scale-box,
+.phone-stage[data-native-viewport="true"] .phone-device {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.phone-stage[data-native-viewport="true"] .phone-device {
+  transform: none !important;
+}
+
+.phone-stage[data-native-viewport="true"] .device-screen {
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 0 !important;
+  box-shadow: none;
+  cursor: auto;
+}
+
+.phone-stage[data-native-viewport="true"] .device-screen,
+.phone-stage[data-native-viewport="true"] .device-screen * {
+  cursor: auto !important;
+}
+
+.mobile-app-viewport[data-native-viewport="true"] {
+  bottom: 0 !important;
+}
+
+.mobile-app-viewport[data-native-viewport="true"] .mobile-page {
+  --mobile-safe-area-height: env(safe-area-inset-bottom, 0px);
+}
+
 .device-menu-bar {
   position: absolute;
   z-index: 100;

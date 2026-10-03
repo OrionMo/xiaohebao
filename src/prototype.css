@@ -180,6 +180,23 @@
 .device-screen[data-device="pixel-10"] .bottom-nav { bottom: 10px; }
 .device-screen[data-device="pixel-10"] .toast { bottom: 92px; }
 
+.phone-stage[data-native-viewport="true"] .finance-app .screen-content {
+  padding-top: max(22px, var(--device-safe-area-top, 0px));
+  padding-right: 18px;
+  padding-bottom: calc(108px + var(--device-safe-area-bottom, 0px));
+  padding-left: 18px;
+}
+
+.phone-stage[data-native-viewport="true"] .bottom-nav {
+  right: 14px;
+  bottom: max(10px, var(--device-safe-area-bottom, 0px));
+  left: 14px;
+}
+
+.phone-stage[data-native-viewport="true"] .toast {
+  bottom: calc(92px + var(--device-safe-area-bottom, 0px));
+}
+
 .finance-app .sheet-overlay { background: rgba(25,38,58,.24); backdrop-filter: blur(3px); }
 .finance-app .bottom-sheet { border: 1px solid rgba(255,255,255,.82); background: rgba(248,251,255,.94); box-shadow: 0 -20px 60px rgba(33,58,92,.22); backdrop-filter: blur(26px); }
 .edit-form { display: grid; gap: 11px; }
@@ -194,7 +211,7 @@
 .save-edit-button { background: #347ff0; color: white; }
 
 @media (max-height: 760px) {
-  .finance-app .screen-content { padding-top: 62px; }
+  .phone-stage:not([data-native-viewport="true"]) .finance-app .screen-content { padding-top: 62px; }
   .budget-card { padding: 17px; }
   .budget-card-top strong { font-size: 29px; }
   .category-card { padding: 11px; }

@@ -1,12 +1,16 @@
 import { useEffect, useState } from "react";
 import { KeyboardInput, useKeyboard } from "./Keyboard";
 import { useMobileDevice } from "./Device";
+import { mobileAssets } from "./assets";
+import { useNativeViewport } from "./PhoneFrame";
 
 export function StatusBar() {
   const [now, setNow] = useState(() => new Date());
   const { device } = useMobileDevice();
+  const nativeViewport = useNativeViewport();
 
   useEffect(() => {
+    if (nativeViewport) return;
     const syncToMinute = window.setTimeout(() => {
       setNow(new Date());
     }, (60 - now.getSeconds()) * 1000 - now.getMilliseconds());
@@ -16,7 +20,9 @@ export function StatusBar() {
       window.clearTimeout(syncToMinute);
       window.clearInterval(interval);
     };
-  }, [now]);
+  }, [nativeViewport, now]);
+
+  if (nativeViewport) return null;
 
   return (
     <div className="status-bar" aria-label="Device status bar">
@@ -33,6 +39,9 @@ export function StatusBar() {
 export function HomeIndicator() {
   const { device } = useMobileDevice();
   const keyboard = useKeyboard();
+  const nativeViewport = useNativeViewport();
+
+  if (nativeViewport) return null;
 
   if (device.platform === "android") {
     if (keyboard.visible) return null;
@@ -41,7 +50,7 @@ export function HomeIndicator() {
       <img
         className="android-navigation-bar"
         data-testid="android-navigation-bar"
-        src="/assets/android/navigation-bar.svg"
+        src={mobileAssets.androidNavigationBar}
         alt=""
         aria-hidden="true"
         draggable={false}
@@ -98,8 +107,8 @@ function StatusIndicators({ platform }: { platform: "ios" | "android" }) {
       data-platform={platform}
       src={
         platform === "android"
-          ? "/assets/status/status-icons.svg"
-          : "/assets/status/ios-status-icons.svg"
+          ? mobileAssets.androidStatusIcons
+          : mobileAssets.iosStatusIcons
       }
       alt=""
       aria-hidden="true"

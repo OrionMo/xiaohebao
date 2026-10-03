@@ -2,6 +2,7 @@ import { useEffect, type PropsWithChildren } from "react";
 import { MobileDeviceProvider, useMobileDevice } from "./Device";
 import { KeyboardDock, KeyboardProvider, useKeyboard } from "./Keyboard";
 import { PhoneFrame } from "./PhoneFrame";
+import { useNativeViewport } from "./PhoneFrame";
 import { HomeIndicator, StatusBar } from "./components";
 
 export function MobileRuntime({ children }: PropsWithChildren) {
@@ -23,12 +24,14 @@ export function MobileRuntime({ children }: PropsWithChildren) {
 function MobileAppViewport({ children }: PropsWithChildren) {
   const { device } = useMobileDevice();
   const keyboard = useKeyboard();
+  const nativeViewport = useNativeViewport();
 
   return (
     <div
       className="mobile-app-viewport"
       data-keyboard-visible={keyboard.visible ? "true" : "false"}
       data-platform={device.platform}
+      data-native-viewport={nativeViewport ? "true" : "false"}
       data-testid="mobile-app-viewport"
     >
       {children}

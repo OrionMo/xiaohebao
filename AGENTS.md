@@ -6,6 +6,7 @@
 - The visual source of truth is the three enhanced frosted-glass mockups under `references/`: monthly overview, quick expense entry, and monthly analysis.
 - Keep the core path focused on monthly budget visibility, quick categorized expense entry, and category analysis. Secondary settings stay in “我的”.
 - Store financial data locally and support offline use. Do not add accounts, cloud sync, bank connections, investments, or social features unless the user explicitly changes scope.
+- On real narrow touch devices and installed PWAs, render the app directly at the native viewport size. Hide the desktop device picker, simulated bezel, status bar, camera, home indicator, custom cursor, and simulated keyboard; use the phone's system chrome, safe areas, and native keyboard. Keep the iPhone / Pixel 10 framed preview unchanged on desktop.
 
 ## Prototype Instructions
 

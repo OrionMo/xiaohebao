@@ -13,6 +13,7 @@ import {
 import { motion } from "motion/react";
 import { mobileAssets } from "./assets";
 import { useMobileDevice } from "./Device";
+import { useNativeViewport } from "./PhoneFrame";
 
 type KeyboardContextValue = {
   visible: boolean;
@@ -36,11 +37,12 @@ const KeyboardContext = createContext<KeyboardContextValue | null>(null);
 
 export function KeyboardProvider({ children }: PropsWithChildren) {
   const { device } = useMobileDevice();
+  const nativeViewport = useNativeViewport();
   const [visible, setVisible] = useState(false);
   const [dragOffset, setRawDragOffset] = useState(0);
   const [isDragging, setDragging] = useState(false);
   const [focusedElement, setFocusedElement] = useState<HTMLElement | null>(null);
-  const fullHeight = device.geometry.keyboard.height;
+  const fullHeight = nativeViewport ? 0 : device.geometry.keyboard.height;
   const setDragOffset = (offset: number) => {
     setRawDragOffset(Math.max(0, Math.min(fullHeight, offset)));
   };
@@ -60,7 +62,7 @@ export function KeyboardProvider({ children }: PropsWithChildren) {
         setRawDragOffset(0);
         setDragging(false);
         setFocusedElement(element ?? null);
-        setVisible(true);
+        setVisible(!nativeViewport);
       },
       hide: () => {
         focusedElement?.blur();
@@ -69,7 +71,7 @@ export function KeyboardProvider({ children }: PropsWithChildren) {
         setVisible(false);
       },
     }),
-    [dragOffset, focusedElement, fullHeight, isDragging, visible],
+    [dragOffset, focusedElement, fullHeight, isDragging, nativeViewport, visible],
   );
 
   return <KeyboardContext.Provider value={value}>{children}</KeyboardContext.Provider>;
@@ -211,10 +213,13 @@ export function KeyboardTextarea(props: TextareaHTMLAttributes<HTMLTextAreaEleme
 export function KeyboardDock() {
   const keyboard = useKeyboard();
   const { device } = useMobileDevice();
+  const nativeViewport = useNativeViewport();
   const dismissDrag = useKeyboardDismissDrag();
   const keyboardTransition = keyboard.isDragging
     ? { duration: 0 }
     : { duration: 0.26, ease: [0.2, 0.8, 0.2, 1] as [number, number, number, number] };
+
+  if (nativeViewport) return null;
 
   return (
     <motion.div
