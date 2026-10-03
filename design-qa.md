@@ -55,6 +55,7 @@
 - Desktop preview: picker, frame, status bar, home indicator, and 1:1 iPhone screen remain functional.
 - Primary interactions checked: home navigation and entering the add-expense screen.
 - Console errors checked: none.
+- Update delivery: service worker cache upgraded to `glass-finance-v3`; navigations use network-first with an offline cached fallback so installed phones receive new releases.
 
 ## Follow-up polish
 

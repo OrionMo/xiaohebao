@@ -1,4 +1,4 @@
-const CACHE_NAME = "glass-finance-v2";
+const CACHE_NAME = "glass-finance-v3";
 const appUrl = (path) => new URL(path, self.registration.scope).href;
 const APP_SHELL = ["./", "index.html", "manifest.webmanifest", "app-icon.png"].map(appUrl);
 
@@ -16,6 +16,20 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
+
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(appUrl("index.html"), copy));
+          return response;
+        })
+        .catch(() => caches.match(appUrl("index.html"))),
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((cached) => cached || fetch(event.request).then((response) => {
       const copy = response.clone();
