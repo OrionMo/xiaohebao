@@ -21,6 +21,7 @@ const CATEGORY_META: Record<CategoryId, { label: string; color: string; soft: st
   other: { label: "其他", color: "#8fa1b7", soft: "#eef2f6", Icon: Plus },
 };
 const CATEGORIES = Object.keys(CATEGORY_META) as CategoryId[];
+const DEFAULT_MONTHLY_BUDGET = 2000;
 const DEMO_TRANSACTIONS: Transaction[] = [
   { id: "demo-1", amount: 26, category: "food", note: "食堂午餐", date: "2026-10-02" },
   { id: "demo-2", amount: 150, category: "study", note: "专业课教材", date: "2026-10-02" },
@@ -61,6 +62,7 @@ export default function Prototype() {
   const [month, setMonth] = useState("2026-10");
   const [transactions, setTransactions] = useState<Transaction[]>(() => readStored("glass-finance-transactions", DEMO_TRANSACTIONS));
   const [budgets, setBudgets] = useState<Record<CategoryId, number>>(() => readStored("glass-finance-budgets", DEFAULT_BUDGETS));
+  const [monthlyBudget, setMonthlyBudget] = useState<number>(() => readStored("glass-finance-monthly-budget", DEFAULT_MONTHLY_BUDGET));
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState<CategoryId>("food");
   const [note, setNote] = useState("");
@@ -70,6 +72,7 @@ export default function Prototype() {
 
   useEffect(() => { window.localStorage.setItem("glass-finance-transactions", JSON.stringify(transactions)); }, [transactions]);
   useEffect(() => { window.localStorage.setItem("glass-finance-budgets", JSON.stringify(budgets)); }, [budgets]);
+  useEffect(() => { window.localStorage.setItem("glass-finance-monthly-budget", JSON.stringify(monthlyBudget)); }, [monthlyBudget]);
   useEffect(() => { if ("serviceWorker" in navigator) navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => undefined); }, []);
   useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => setToast(""), 2200); return () => window.clearTimeout(timer); }, [toast]);
 
@@ -79,7 +82,9 @@ export default function Prototype() {
     monthlyTransactions.forEach((item) => { next[item.category] += item.amount; });
     return next;
   }, [monthlyTransactions]);
-  const totalBudget = Object.values(budgets).reduce((sum, value) => sum + value, 0);
+  const totalBudget = monthlyBudget;
+  const allocatedBudget = Object.values(budgets).reduce((sum, value) => sum + value, 0);
+  const allocationRemaining = totalBudget - allocatedBudget;
   const spent = Object.values(totals).reduce((sum, value) => sum + value, 0);
   const remaining = totalBudget - spent;
   const progress = totalBudget ? Math.min(100, Math.round((spent / totalBudget) * 100)) : 0;
@@ -201,11 +206,11 @@ export default function Prototype() {
   const renderProfile = () => (
     <section className="page page-profile" data-testid="profile-screen">
       <header className="page-header profile-header"><div className="avatar"><User size={28} weight="fill" /></div><div><p className="eyebrow">我的账户</p><h1>大学生活费计划</h1></div><GearSix size={24} color="#6e7d91" /></header>
-      <article className="glass-card settings-card"><div className="settings-title"><Wallet size={22} weight="duotone" /><div><strong>每月预算</strong><span>按常用大类分配</span></div><b>{currency(totalBudget)}</b></div>
-        <div className="budget-settings-list">{CATEGORIES.map((id) => { const meta = CATEGORY_META[id]; const Icon = meta.Icon; return <label className="budget-setting-row" key={id}><span style={{ color: meta.color, backgroundColor: meta.soft }}><Icon size={17} weight="fill" /></span><em>{meta.label}</em><div>¥<KeyboardInput inputMode="numeric" aria-label={`${meta.label}预算`} value={budgets[id]} onChange={(event) => setBudgets((current) => ({ ...current, [id]: Number(event.target.value) || 0 }))} /></div></label>; })}</div>
+      <article className="glass-card settings-card"><div className="settings-title"><Wallet size={22} weight="duotone" /><div className="settings-title-copy"><strong>每月预算</strong><span>按常用大类分配</span></div><label className="monthly-budget-field"><span>¥</span><KeyboardInput inputMode="numeric" aria-label="每月预算" value={monthlyBudget} onChange={(event) => setMonthlyBudget(Math.max(0, Number(event.target.value) || 0))} /></label></div>
+        <div className="budget-settings-list">{CATEGORIES.map((id) => { const meta = CATEGORY_META[id]; const Icon = meta.Icon; return <label className="budget-setting-row" key={id}><span style={{ color: meta.color, backgroundColor: meta.soft }}><Icon size={17} weight="fill" /></span><em>{meta.label}</em><div>¥<KeyboardInput inputMode="numeric" aria-label={`${meta.label}预算`} value={budgets[id]} onChange={(event) => setBudgets((current) => ({ ...current, [id]: Number(event.target.value) || 0 }))} /></div></label>; })}<div className="budget-setting-row budget-remaining-row"><span><Wallet size={17} weight="fill" /></span><em>剩余<small>预算未分配</small></em><b data-negative={allocationRemaining < 0}>{currency(allocationRemaining)}</b></div></div>
       </article>
       <article className="glass-card privacy-card"><ShieldCheck size={28} color="#42b98d" weight="duotone" /><div><strong>数据只保存在这台设备</strong><p>无需登录，也不会上传你的账单。断网时也能继续使用。</p></div></article>
-      <button className="secondary-button" type="button" onClick={() => { setTransactions(DEMO_TRANSACTIONS); setBudgets(DEFAULT_BUDGETS); setMonth("2026-10"); setToast("已恢复演示数据"); }}>恢复演示数据</button>
+      <button className="secondary-button" type="button" onClick={() => { setTransactions(DEMO_TRANSACTIONS); setBudgets(DEFAULT_BUDGETS); setMonthlyBudget(DEFAULT_MONTHLY_BUDGET); setMonth("2026-10"); setToast("已恢复演示数据"); }}>恢复演示数据</button>
       <p className="version-note">小荷包 · 学生版 1.0</p>
     </section>
   );
