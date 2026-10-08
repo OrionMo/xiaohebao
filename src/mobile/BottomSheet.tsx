@@ -3,7 +3,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { useDrag } from "@use-gesture/react";
 import { AnimatePresence, motion } from "motion/react";
 import { useKeyboard, useKeyboardInsets } from "./Keyboard";
-import { useScreenPortal } from "./PhoneFrame";
+import { useNativeViewport, useScreenPortal } from "./PhoneFrame";
 import { useMobileDevice } from "./Device";
 
 type BottomSheetProps = PropsWithChildren<{
@@ -24,6 +24,7 @@ export function BottomSheet({
 }: BottomSheetProps) {
   const { device } = useMobileDevice();
   const { screenRef } = useScreenPortal();
+  const nativeViewport = useNativeViewport();
   const keyboard = useKeyboard();
   const { keyboardHeight } = useKeyboardInsets();
   const [dragY, setDragY] = useState(0);
@@ -67,8 +68,9 @@ export function BottomSheet({
 
   const sheetHeight = Math.round(device.geometry.screen.height * snap);
   const effectiveHeight = Math.max(260, sheetHeight - Math.min(keyboardHeight, 180));
-  const sheetBottom =
-    device.platform === "android"
+  const sheetBottom = nativeViewport
+    ? keyboardHeight
+    : device.platform === "android"
       ? Math.max(device.geometry.safeArea.bottom, keyboardHeight)
       : keyboardHeight;
   const portalContainer = screenRef.current ?? undefined;

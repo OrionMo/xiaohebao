@@ -97,6 +97,38 @@ test("BottomSheet remains mounted while its default exit animation plays", async
   await expect(page.getByTestId("bottom-sheet")).toHaveCount(0);
 });
 
+test("native Android BottomSheet reaches the full-screen bottom without Pixel navigation spacing", async ({ browser }) => {
+  const context = await browser.newContext({
+    baseURL: `http://127.0.0.1:${process.env.MOBILE_RUNTIME_TEST_PORT ?? 4174}`,
+    hasTouch: true,
+    isMobile: true,
+    userAgent: "Mozilla/5.0 (Linux; Android 16; Xiaomi 15) AppleWebKit/537.36 Chrome/140.0 Mobile Safari/537.36",
+    viewport: { width: 400, height: 890 },
+  });
+  const mobilePage = await context.newPage();
+
+  try {
+    await mobilePage.goto("/tests/runtime-fixture.html");
+    await expect(mobilePage.locator(".phone-stage")).toHaveAttribute("data-native-viewport", "true");
+    await expect(mobilePage.getByTestId("android-navigation-bar")).toHaveCount(0);
+    await mobilePage.locator(".sheet-trigger").click();
+    await mobilePage.waitForTimeout(700);
+
+    const layout = await mobilePage.evaluate(() => {
+      const screen = document.querySelector<HTMLElement>('[data-testid="device-screen"]')!;
+      const sheet = document.querySelector<HTMLElement>('[data-testid="bottom-sheet"]')!;
+      return {
+        screenBottom: screen.getBoundingClientRect().bottom,
+        sheetBottom: sheet.getBoundingClientRect().bottom,
+      };
+    });
+
+    expect(Math.abs(layout.screenBottom - layout.sheetBottom)).toBeLessThanOrEqual(1);
+  } finally {
+    await context.close();
+  }
+});
+
 test("keyboard and its attached footer dismiss on the same transition", async ({ page }) => {
   await page.goto("/tests/runtime-fixture.html?fixture=keyboard");
   const input = page.getByLabel("Message");
