@@ -209,6 +209,9 @@
 
 .finance-app .sheet-overlay { background: rgba(25,38,58,.24); backdrop-filter: blur(3px); }
 .finance-app .bottom-sheet { border: 1px solid rgba(255,255,255,.82); background: rgba(248,251,255,.94); box-shadow: 0 -20px 60px rgba(33,58,92,.22); backdrop-filter: blur(26px); }
+.finance-app .bottom-sheet:has(.category-detail-sheet) { min-height: 0; }
+.finance-app .bottom-sheet:has(.category-detail-sheet) .sheet-content { padding-bottom: max(12px, var(--device-safe-area-bottom, 0px)); }
+.phone-device[data-platform="android"] .finance-app .bottom-sheet:has(.category-detail-sheet) .sheet-content { padding-bottom: 12px; }
 .category-detail-sheet { display: grid; gap: 13px; }
 .category-detail-summary { display: flex; align-items: center; gap: 11px; padding: 13px; border: 1px solid rgba(255,255,255,.9); border-radius: 18px; background: rgba(255,255,255,.6); box-shadow: 0 9px 24px rgba(46,76,115,.07); }
 .category-detail-icon { display: grid; width: 42px; height: 42px; flex: 0 0 auto; place-items: center; border-radius: 14px; }
