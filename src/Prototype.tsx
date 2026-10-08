@@ -67,6 +67,7 @@ export default function Prototype() {
   const [category, setCategory] = useState<CategoryId>("food");
   const [note, setNote] = useState("");
   const [date, setDate] = useState("2026-10-02");
+  const [selectedCategory, setSelectedCategory] = useState<CategoryId | null>(null);
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [toast, setToast] = useState("");
 
@@ -77,6 +78,9 @@ export default function Prototype() {
   useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => setToast(""), 2200); return () => window.clearTimeout(timer); }, [toast]);
 
   const monthlyTransactions = useMemo(() => transactions.filter((item) => monthKey(item.date) === month), [month, transactions]);
+  const categoryTransactions = useMemo(() => selectedCategory
+    ? monthlyTransactions.filter((item) => item.category === selectedCategory).sort((a, b) => b.date.localeCompare(a.date))
+    : [], [monthlyTransactions, selectedCategory]);
   const totals = useMemo(() => {
     const next = Object.fromEntries(CATEGORIES.map((id) => [id, 0])) as Record<CategoryId, number>;
     monthlyTransactions.forEach((item) => { next[item.category] += item.amount; });
@@ -91,6 +95,8 @@ export default function Prototype() {
   const sortedCategories = [...CATEGORIES].sort((a, b) => totals[b] - totals[a]);
 
   const navigate = (next: Tab) => { keyboard.hide(); setTab(next); resetDeviceViewport(); };
+  const openCategoryDetails = (id: CategoryId) => { keyboard.hide(); setSelectedCategory(id); };
+  const editFromCategoryDetails = (item: Transaction) => { setSelectedCategory(null); setEditing(item); };
   const submitExpense = () => {
     const numeric = Number(amount);
     if (!numeric || numeric <= 0) { setToast("请输入有效金额"); return; }
@@ -134,10 +140,10 @@ export default function Prototype() {
         {CATEGORIES.map((id) => {
           const meta = CATEGORY_META[id]; const Icon = meta.Icon;
           const percent = budgets[id] ? Math.min(100, Math.round(totals[id] / budgets[id] * 100)) : 0;
-          return <article className="glass-card category-budget-row" key={id}>
+          return <button className="glass-card category-budget-row" data-testid={`category-budget-${id}`} type="button" key={id} aria-label={`查看${meta.label}消费明细`} onClick={() => openCategoryDetails(id)}>
             <div className="category-icon" style={{ color: meta.color, backgroundColor: meta.soft }}><Icon size={20} weight="fill" /></div>
             <div className="category-budget-copy"><div><strong>{meta.label}</strong><span>{currency(totals[id])} / {currency(budgets[id])}</span></div><div className="category-progress"><span style={{ width: `${percent}%`, backgroundColor: meta.color }} /></div></div>
-          </article>;
+          </button>;
         })}
       </div>
       <div className="section-heading recent-heading"><h2>最近记录</h2><span>{monthlyTransactions.length} 笔</span></div>
@@ -207,7 +213,7 @@ export default function Prototype() {
     <section className="page page-profile" data-testid="profile-screen">
       <header className="page-header profile-header"><div className="avatar"><User size={28} weight="fill" /></div><div><p className="eyebrow">我的账户</p><h1>大学生活费计划</h1></div><GearSix size={24} color="#6e7d91" /></header>
       <article className="glass-card settings-card"><div className="settings-title"><Wallet size={22} weight="duotone" /><div className="settings-title-copy"><strong>每月预算</strong><span>按常用大类分配</span></div><label className="monthly-budget-field"><span>¥</span><KeyboardInput inputMode="numeric" aria-label="每月预算" value={monthlyBudget} onChange={(event) => setMonthlyBudget(Math.max(0, Number(event.target.value) || 0))} /></label></div>
-        <div className="budget-settings-list">{CATEGORIES.map((id) => { const meta = CATEGORY_META[id]; const Icon = meta.Icon; return <label className="budget-setting-row" key={id}><span style={{ color: meta.color, backgroundColor: meta.soft }}><Icon size={17} weight="fill" /></span><em>{meta.label}</em><div>¥<KeyboardInput inputMode="numeric" aria-label={`${meta.label}预算`} value={budgets[id]} onChange={(event) => setBudgets((current) => ({ ...current, [id]: Number(event.target.value) || 0 }))} /></div></label>; })}<div className="budget-setting-row budget-remaining-row"><span><Wallet size={17} weight="fill" /></span><em>剩余<small>预算未分配</small></em><b data-negative={allocationRemaining < 0}>{currency(allocationRemaining)}</b></div></div>
+        <div className="budget-settings-list">{CATEGORIES.map((id) => { const meta = CATEGORY_META[id]; const Icon = meta.Icon; return <div className="budget-setting-row" key={id}><button className="budget-setting-trigger" data-testid={`profile-category-${id}`} type="button" aria-label={`查看${meta.label}消费明细`} onClick={() => openCategoryDetails(id)}><span style={{ color: meta.color, backgroundColor: meta.soft }}><Icon size={17} weight="fill" /></span><em>{meta.label}</em><CaretRight className="budget-detail-caret" size={14} weight="bold" /></button><label className="budget-setting-value">¥<KeyboardInput inputMode="numeric" aria-label={`${meta.label}预算`} value={budgets[id]} onChange={(event) => setBudgets((current) => ({ ...current, [id]: Number(event.target.value) || 0 }))} /></label></div>; })}<div className="budget-setting-row budget-remaining-row"><span><Wallet size={17} weight="fill" /></span><em>剩余<small>预算未分配</small></em><b data-negative={allocationRemaining < 0}>{currency(allocationRemaining)}</b></div></div>
       </article>
       <article className="glass-card privacy-card"><ShieldCheck size={28} color="#42b98d" weight="duotone" /><div><strong>数据只保存在这台设备</strong><p>无需登录，也不会上传你的账单。断网时也能继续使用。</p></div></article>
       <button className="secondary-button" type="button" onClick={() => { setTransactions(DEMO_TRANSACTIONS); setBudgets(DEFAULT_BUDGETS); setMonthlyBudget(DEFAULT_MONTHLY_BUDGET); setMonth("2026-10"); setToast("已恢复演示数据"); }}>恢复演示数据</button>
@@ -225,6 +231,27 @@ export default function Prototype() {
       <button type="button" data-active={tab === "profile"} onClick={() => navigate("profile")}><User size={21} weight={tab === "profile" ? "fill" : "regular"} /><span>我的</span></button>
     </nav>
     {toast ? <div className="toast" role="status"><Check size={15} weight="bold" />{toast}</div> : null}
+    <BottomSheet open={Boolean(selectedCategory)} onOpenChange={(open) => { if (!open) setSelectedCategory(null); }} title={selectedCategory ? `${CATEGORY_META[selectedCategory].label}明细` : "分类明细"} description={selectedCategory ? `${monthTitle(month)} · ${categoryTransactions.length} 笔记录` : undefined} snap={0.72}>
+      {selectedCategory ? (() => {
+        const meta = CATEGORY_META[selectedCategory]; const Icon = meta.Icon;
+        const categoryRemaining = budgets[selectedCategory] - totals[selectedCategory];
+        return <div className="category-detail-sheet" data-testid="category-detail-sheet">
+          <div className="category-detail-summary">
+            <span className="category-detail-icon" style={{ color: meta.color, backgroundColor: meta.soft }}><Icon size={22} weight="fill" /></span>
+            <div><span>本月已花</span><strong>{currency(totals[selectedCategory])}</strong></div>
+            <div className="category-detail-budget"><span>分类预算剩余</span><strong data-negative={categoryRemaining < 0}>{currency(categoryRemaining)}</strong></div>
+          </div>
+          <div className="category-detail-list">
+            {categoryTransactions.length ? categoryTransactions.map((item) => <button className="category-detail-item" type="button" key={item.id} onClick={() => editFromCategoryDetails(item)}>
+              <span className="category-detail-date">{shortDate(item.date)}</span>
+              <span className="category-detail-copy"><strong>{item.note}</strong><small>点击可编辑</small></span>
+              <strong className="category-detail-amount">-{currency(item.amount)}</strong>
+              <CaretRight size={14} weight="bold" />
+            </button>) : <div className="category-detail-empty"><Icon size={30} weight="duotone" /><strong>本月还没有{meta.label}支出</strong><span>快速记一笔后，会自动显示在这里</span></div>}
+          </div>
+        </div>;
+      })() : null}
+    </BottomSheet>
     <BottomSheet open={Boolean(editing)} onOpenChange={(open) => { if (!open) setEditing(null); }} title="编辑这笔记录" description="修改后会立刻更新本月统计" snap={0.74}>
       {editing ? <div className="edit-form">
         <label>金额<KeyboardInput inputMode="decimal" value={editing.amount} onChange={(event) => setEditing({ ...editing, amount: Number(event.target.value) || 0 })} /></label>
