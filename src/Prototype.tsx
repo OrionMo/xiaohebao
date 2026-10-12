@@ -29,7 +29,13 @@ const CATEGORY_ICONS: Record<CategoryIconKey, typeof ForkKnife> = {
   favorite: Heart,
   sparkle: Sparkle,
 };
-const CUSTOM_ICON_OPTIONS: Array<{ key: CategoryIconKey; label: string }> = [
+const CATEGORY_ICON_OPTIONS: Array<{ key: CategoryIconKey; label: string }> = [
+  { key: "food", label: "餐饮" },
+  { key: "transport", label: "交通" },
+  { key: "study", label: "学习" },
+  { key: "shopping", label: "购物" },
+  { key: "fun", label: "娱乐" },
+  { key: "other", label: "其他" },
   { key: "health", label: "医疗" },
   { key: "pet", label: "宠物" },
   { key: "travel", label: "旅行" },
@@ -71,17 +77,19 @@ function readStored<T>(key: string, fallback: T): T {
 }
 function readStoredCategories(): CategoryDefinition[] {
   const stored = readStored<unknown>("glass-finance-categories", []);
-  if (!Array.isArray(stored)) return DEFAULT_CATEGORIES;
-  const builtInIds = new Set(DEFAULT_CATEGORIES.map((item) => item.id));
-  const custom = stored.filter((item): item is CategoryDefinition => {
+  if (!Array.isArray(stored) || stored.length === 0) return DEFAULT_CATEGORIES;
+  const seen = new Set<string>();
+  const valid = stored.filter((item): item is CategoryDefinition => {
     if (!item || typeof item !== "object") return false;
     const value = item as Partial<CategoryDefinition>;
-    return typeof value.id === "string" && value.id.startsWith("custom-") && !builtInIds.has(value.id)
+    const isValid = typeof value.id === "string" && value.id.length > 0 && !seen.has(value.id)
       && typeof value.label === "string" && value.label.trim().length > 0
       && typeof value.color === "string" && typeof value.soft === "string"
       && typeof value.icon === "string" && value.icon in CATEGORY_ICONS;
-  }).map((item) => ({ ...item, builtIn: false }));
-  return [...DEFAULT_CATEGORIES, ...custom];
+    if (isValid) seen.add(value.id as string);
+    return isValid;
+  }).map((item) => ({ ...item, builtIn: Boolean(item.builtIn) }));
+  return valid.length > 0 ? valid : DEFAULT_CATEGORIES;
 }
 function currency(value: number) { return `¥${Math.round(value).toLocaleString("zh-CN")}`; }
 function monthKey(date: string) { return date.slice(0, 7); }
@@ -198,12 +206,14 @@ export default function Prototype() {
   const removeCategory = () => {
     if (!categoryDraft?.id) return;
     const existing = categories.find((item) => item.id === categoryDraft.id);
-    if (!existing || existing.builtIn) return;
+    if (!existing) return;
+    if (categories.length <= 1) { setToast("至少需要保留一个分类"); return; }
     if (transactions.some((item) => item.category === existing.id)) { setToast("该分类还有账单，请先修改账单分类"); return; }
     if (!deleteCategoryArmed) { setDeleteCategoryArmed(true); return; }
+    const fallbackCategory = categories.find((item) => item.id !== existing.id)?.id || "food";
     setCategories((current) => current.filter((item) => item.id !== existing.id));
     setBudgets((current) => { const next = { ...current }; delete next[existing.id]; return next; });
-    if (category === existing.id) setCategory("food");
+    if (category === existing.id) setCategory(fallbackCategory);
     if (selectedCategory === existing.id) setSelectedCategory(null);
     keyboard.hide(); setCategoryDraft(null); setDeleteCategoryArmed(false); setToast("分类已删除");
   };
@@ -312,7 +322,7 @@ export default function Prototype() {
             const meta = categoryMeta[id]; const Icon = meta.Icon;
             return <div className="budget-setting-row" key={id}>
               <button className="budget-setting-trigger" data-testid={`profile-category-${id}`} type="button" aria-label={`查看${meta.label}消费明细`} onClick={() => openCategoryDetails(id)}><span style={{ color: meta.color, backgroundColor: meta.soft }}><Icon size={17} weight="fill" /></span><em>{meta.label}</em><CaretRight className="budget-detail-caret" size={14} weight="bold" /></button>
-              {!meta.builtIn ? <button className="category-manage-button" type="button" aria-label={`编辑${meta.label}分类`} onClick={() => openCategoryEditor(id)}><NotePencil size={15} weight="bold" /></button> : null}
+              <button className="category-manage-button" type="button" aria-label={`编辑${meta.label}分类`} onClick={() => openCategoryEditor(id)}><NotePencil size={15} weight="bold" /></button>
               <label className="budget-setting-value">¥<KeyboardInput inputMode="numeric" aria-label={`${meta.label}预算`} value={budgets[id] || 0} onChange={(event) => setBudgets((current) => ({ ...current, [id]: Number(event.target.value) || 0 }))} /></label>
             </div>;
           })}
@@ -357,15 +367,15 @@ export default function Prototype() {
         </div>;
       })() : null}
     </BottomSheet>
-    <BottomSheet open={Boolean(categoryDraft)} onOpenChange={(open) => { if (!open) { setCategoryDraft(null); setDeleteCategoryArmed(false); } }} title={categoryDraft?.id ? "编辑自定义分类" : "添加分类"} description="新分类会同步出现在记账、首页和分析中" snap={0.78}>
+    <BottomSheet open={Boolean(categoryDraft)} onOpenChange={(open) => { if (!open) { setCategoryDraft(null); setDeleteCategoryArmed(false); } }} title={categoryDraft?.id ? "编辑分类" : "添加分类"} description={categoryDraft?.id ? "修改后会同步更新记账、首页和分析" : "新分类会同步出现在记账、首页和分析中"} snap={0.78}>
       {categoryDraft ? <div className="category-editor" data-testid="category-editor">
         <label className="category-editor-field"><span>分类名称</span><KeyboardInput data-testid="category-name" value={categoryDraft.label} maxLength={8} placeholder="例如：医疗" onChange={(event) => setCategoryDraft({ ...categoryDraft, label: event.target.value })} /></label>
         <label className="category-editor-field"><span>分类预算</span><span className="category-budget-input"><i>¥</i><KeyboardInput data-testid="category-budget" inputMode="numeric" value={categoryDraft.budget} onChange={(event) => setCategoryDraft({ ...categoryDraft, budget: event.target.value.replace(/[^0-9]/g, "") })} /></span></label>
-        <div className="category-editor-group"><span>选择图标</span><div className="category-icon-options">{CUSTOM_ICON_OPTIONS.map((option) => { const Icon = CATEGORY_ICONS[option.key]; return <button type="button" key={option.key} data-selected={categoryDraft.icon === option.key} onClick={() => setCategoryDraft({ ...categoryDraft, icon: option.key })}><Icon size={20} weight="fill" /><small>{option.label}</small></button>; })}</div></div>
+        <div className="category-editor-group"><span>选择图标</span><div className="category-icon-options">{CATEGORY_ICON_OPTIONS.map((option) => { const Icon = CATEGORY_ICONS[option.key]; return <button type="button" key={option.key} data-selected={categoryDraft.icon === option.key} onClick={() => setCategoryDraft({ ...categoryDraft, icon: option.key })}><Icon size={20} weight="fill" /><small>{option.label}</small></button>; })}</div></div>
         <div className="category-editor-group"><span>选择颜色</span><div className="category-color-options">{CATEGORY_COLORS.map((option) => <button type="button" key={option.color} data-selected={categoryDraft.color === option.color} aria-label={`选择颜色 ${option.color}`} style={{ backgroundColor: option.color }} onClick={() => setCategoryDraft({ ...categoryDraft, color: option.color, soft: option.soft })}>{categoryDraft.color === option.color ? <Check size={13} weight="bold" /> : null}</button>)}</div></div>
         <div className="category-preview"><span style={{ color: categoryDraft.color, backgroundColor: categoryDraft.soft }}>{(() => { const Icon = CATEGORY_ICONS[categoryDraft.icon]; return <Icon size={19} weight="fill" />; })()}</span><div><small>分类预览</small><strong>{categoryDraft.label.trim() || "新分类"}</strong></div><b>{currency(Number(categoryDraft.budget) || 0)}</b></div>
         <div className={categoryDraft.id ? "category-editor-actions has-delete" : "category-editor-actions"}>
-          {categoryDraft.id ? <button className="delete-category-button" type="button" onClick={removeCategory}><Trash size={16} />{deleteCategoryArmed ? "确认删除" : "删除分类"}</button> : null}
+          {categoryDraft.id ? <button className="delete-category-button" data-testid="delete-category" type="button" onClick={removeCategory}><Trash size={16} />{deleteCategoryArmed ? "确认删除" : "删除分类"}</button> : null}
           <button className="save-category-button" data-testid="save-category" type="button" onClick={saveCategory}>{categoryDraft.id ? "保存修改" : "添加分类"}</button>
         </div>
       </div> : null}
