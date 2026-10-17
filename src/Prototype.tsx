@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties } from "react";
 import {
   AirplaneTilt, ArrowDown, BookOpen, Bus, CalendarBlank, CaretLeft, CaretRight, ChartDonut, Check,
-  DeviceMobile, FirstAid, ForkKnife, GameController, GearSix, House, Heart, Lightbulb,
-  NotePencil, PawPrint, Plus, ShieldCheck, ShoppingBag, Sparkle, Trash, User, Wallet,
+  Database, DeviceMobile, DownloadSimple, FirstAid, ForkKnife, GameController, GearSix, House,
+  Heart, Lightbulb, NotePencil, PawPrint, Plus, ShieldCheck, ShoppingBag, Sparkle, Trash,
+  UploadSimple, User, Wallet,
 } from "@phosphor-icons/react";
 import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 import { BottomSheet, KeyboardInput, KeyboardTextarea, MobileScroll, useKeyboard } from "./mobile";
@@ -14,6 +15,13 @@ type CategoryIconKey = "food" | "transport" | "study" | "shopping" | "fun" | "ot
 type Transaction = { id: string; amount: number; category: CategoryId; note: string; date: string };
 type CategoryDefinition = { id: CategoryId; label: string; color: string; soft: string; icon: CategoryIconKey; builtIn: boolean };
 type CategoryDraft = { id?: CategoryId; label: string; budget: string; icon: CategoryIconKey; color: string; soft: string };
+type BackupPayload = {
+  app: "xiaohebao";
+  version: 1;
+  exportedAt: string;
+  data: { categories: CategoryDefinition[]; transactions: Transaction[]; budgets: Record<CategoryId, number>; monthlyBudget: number; month: string };
+};
+type PendingBackup = { fileName: string; payload: BackupPayload };
 
 const CATEGORY_ICONS: Record<CategoryIconKey, typeof ForkKnife> = {
   food: ForkKnife,
@@ -75,11 +83,10 @@ const DEFAULT_BUDGETS: Record<CategoryId, number> = { food: 600, transport: 200,
 function readStored<T>(key: string, fallback: T): T {
   try { const value = window.localStorage.getItem(key); return value ? JSON.parse(value) as T : fallback; } catch { return fallback; }
 }
-function readStoredCategories(): CategoryDefinition[] {
-  const stored = readStored<unknown>("glass-finance-categories", []);
-  if (!Array.isArray(stored) || stored.length === 0) return DEFAULT_CATEGORIES;
+function normalizeCategories(input: unknown): CategoryDefinition[] {
+  if (!Array.isArray(input)) return [];
   const seen = new Set<string>();
-  const valid = stored.filter((item): item is CategoryDefinition => {
+  return input.filter((item): item is CategoryDefinition => {
     if (!item || typeof item !== "object") return false;
     const value = item as Partial<CategoryDefinition>;
     const isValid = typeof value.id === "string" && value.id.length > 0 && !seen.has(value.id)
@@ -89,7 +96,38 @@ function readStoredCategories(): CategoryDefinition[] {
     if (isValid) seen.add(value.id as string);
     return isValid;
   }).map((item) => ({ ...item, builtIn: Boolean(item.builtIn) }));
+}
+function readStoredCategories(): CategoryDefinition[] {
+  const valid = normalizeCategories(readStored<unknown>("glass-finance-categories", []));
   return valid.length > 0 ? valid : DEFAULT_CATEGORIES;
+}
+function parseBackupPayload(input: unknown): BackupPayload | null {
+  if (!input || typeof input !== "object") return null;
+  const envelope = input as Partial<BackupPayload>;
+  if (envelope.app !== "xiaohebao" || envelope.version !== 1 || typeof envelope.exportedAt !== "string" || Number.isNaN(Date.parse(envelope.exportedAt)) || !envelope.data || typeof envelope.data !== "object") return null;
+  const raw = envelope.data as Partial<BackupPayload["data"]>;
+  const categories = normalizeCategories(raw.categories);
+  if (!categories.length || !Array.isArray(raw.transactions) || !raw.budgets || typeof raw.budgets !== "object" || typeof raw.monthlyBudget !== "number" || !Number.isFinite(raw.monthlyBudget) || raw.monthlyBudget < 0 || typeof raw.month !== "string" || !/^\d{4}-\d{2}$/.test(raw.month)) return null;
+  const categoryIds = new Set(categories.map((item) => item.id));
+  const transactionIds = new Set<string>();
+  const transactions = raw.transactions.filter((item): item is Transaction => {
+    if (!item || typeof item !== "object") return false;
+    const value = item as Partial<Transaction>;
+    const isValid = typeof value.id === "string" && value.id.length > 0 && !transactionIds.has(value.id)
+      && typeof value.amount === "number" && Number.isFinite(value.amount) && value.amount > 0
+      && typeof value.category === "string" && categoryIds.has(value.category)
+      && typeof value.note === "string" && typeof value.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.date);
+    if (isValid) transactionIds.add(value.id as string);
+    return isValid;
+  });
+  if (transactions.length !== raw.transactions.length) return null;
+  const budgets: Record<CategoryId, number> = {};
+  for (const id of categoryIds) {
+    const value = (raw.budgets as Record<string, unknown>)[id];
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return null;
+    budgets[id] = value;
+  }
+  return { app: "xiaohebao", version: 1, exportedAt: envelope.exportedAt, data: { categories, transactions, budgets, monthlyBudget: raw.monthlyBudget, month: raw.month } };
 }
 function currency(value: number) { return `¥${Math.round(value).toLocaleString("zh-CN")}`; }
 function monthKey(date: string) { return date.slice(0, 7); }
@@ -109,6 +147,7 @@ function resetDeviceViewport() {
 
 export default function Prototype() {
   const keyboard = useKeyboard();
+  const backupInputRef = useRef<HTMLInputElement>(null);
   const [tab, setTab] = useState<Tab>(() => {
     const requested = new URLSearchParams(window.location.search).get("screen");
     return requested === "add" || requested === "analysis" || requested === "profile" ? requested : "home";
@@ -126,6 +165,7 @@ export default function Prototype() {
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [categoryDraft, setCategoryDraft] = useState<CategoryDraft | null>(null);
   const [deleteCategoryArmed, setDeleteCategoryArmed] = useState(false);
+  const [pendingBackup, setPendingBackup] = useState<PendingBackup | null>(null);
   const [toast, setToast] = useState("");
 
   useEffect(() => { window.localStorage.setItem("glass-finance-categories", JSON.stringify(categories)); }, [categories]);
@@ -216,6 +256,44 @@ export default function Prototype() {
     if (category === existing.id) setCategory(fallbackCategory);
     if (selectedCategory === existing.id) setSelectedCategory(null);
     keyboard.hide(); setCategoryDraft(null); setDeleteCategoryArmed(false); setToast("分类已删除");
+  };
+  const exportBackup = () => {
+    const payload: BackupPayload = {
+      app: "xiaohebao",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      data: { categories, transactions, budgets: Object.fromEntries(categoryIds.map((id) => [id, budgets[id] || 0])), monthlyBudget, month },
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    const now = new Date();
+    const dateStamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    anchor.href = url; anchor.download = `小荷包备份-${dateStamp}.json`; document.body.appendChild(anchor); anchor.click(); anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setToast("备份文件已导出");
+  };
+  const chooseBackupFile = () => {
+    keyboard.hide();
+    if (backupInputRef.current) { backupInputRef.current.value = ""; backupInputRef.current.click(); }
+  };
+  const readBackupFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { setToast("备份文件过大"); return; }
+    try {
+      const payload = parseBackupPayload(JSON.parse(await file.text()));
+      if (!payload) { setToast("这不是有效的小荷包备份"); return; }
+      keyboard.hide(); setPendingBackup({ fileName: file.name, payload });
+    } catch { setToast("备份文件无法读取"); }
+  };
+  const restoreBackup = () => {
+    if (!pendingBackup) return;
+    const { data } = pendingBackup.payload;
+    setCategories(data.categories); setTransactions(data.transactions); setBudgets(data.budgets);
+    setMonthlyBudget(data.monthlyBudget); setMonth(data.month); setCategory(data.categories[0].id);
+    setSelectedCategory(null); setEditing(null); setCategoryDraft(null); setPendingBackup(null);
+    keyboard.hide(); setToast("备份已恢复");
   };
   const renderMonthControl = () => (
     <div className="month-control" aria-label="切换月份">
@@ -330,6 +408,14 @@ export default function Prototype() {
           <div className="budget-setting-row budget-remaining-row"><span><Wallet size={17} weight="fill" /></span><em>剩余<small>预算未分配</small></em><b data-negative={allocationRemaining < 0}>{currency(allocationRemaining)}</b></div>
         </div>
       </article>
+      <article className="glass-card backup-card">
+        <div className="backup-card-heading"><span><Database size={21} weight="duotone" /></span><div><strong>数据备份</strong><p>导出到手机，需要时可以完整恢复</p></div></div>
+        <div className="backup-card-actions">
+          <button data-testid="export-backup" type="button" onClick={exportBackup}><DownloadSimple size={17} weight="bold" />导出备份</button>
+          <button data-testid="choose-backup" type="button" onClick={chooseBackupFile}><UploadSimple size={17} weight="bold" />恢复备份</button>
+        </div>
+        <input ref={backupInputRef} className="backup-file-input" type="file" accept=".json,application/json" onChange={readBackupFile} aria-label="选择小荷包备份文件" />
+      </article>
       <article className="glass-card privacy-card"><ShieldCheck size={28} color="#42b98d" weight="duotone" /><div><strong>数据只保存在这台设备</strong><p>无需登录，也不会上传你的账单。断网时也能继续使用。</p></div></article>
       <button className="secondary-button" type="button" onClick={() => { setCategories(DEFAULT_CATEGORIES); setTransactions(DEMO_TRANSACTIONS); setBudgets(DEFAULT_BUDGETS); setMonthlyBudget(DEFAULT_MONTHLY_BUDGET); setCategory("food"); setMonth("2026-10"); setToast("已恢复演示数据"); }}>恢复演示数据</button>
       <p className="version-note">小荷包 · 学生版 1.0</p>
@@ -378,6 +464,14 @@ export default function Prototype() {
           {categoryDraft.id ? <button className="delete-category-button" data-testid="delete-category" type="button" onClick={removeCategory}><Trash size={16} />{deleteCategoryArmed ? "确认删除" : "删除分类"}</button> : null}
           <button className="save-category-button" data-testid="save-category" type="button" onClick={saveCategory}>{categoryDraft.id ? "保存修改" : "添加分类"}</button>
         </div>
+      </div> : null}
+    </BottomSheet>
+    <BottomSheet open={Boolean(pendingBackup)} onOpenChange={(open) => { if (!open) setPendingBackup(null); }} title="恢复数据备份" description="确认后将覆盖这台设备上的当前数据" snap={0.56}>
+      {pendingBackup ? <div className="backup-restore-sheet" data-testid="backup-restore-sheet">
+        <div className="backup-file-summary"><span><Database size={23} weight="duotone" /></span><div><strong>{pendingBackup.fileName}</strong><small>备份时间：{new Date(pendingBackup.payload.exportedAt).toLocaleString("zh-CN", { dateStyle: "medium", timeStyle: "short" })}</small></div></div>
+        <div className="backup-summary-grid"><div><strong>{pendingBackup.payload.data.categories.length}</strong><span>个分类</span></div><div><strong>{pendingBackup.payload.data.transactions.length}</strong><span>笔账单</span></div><div><strong>{currency(pendingBackup.payload.data.monthlyBudget)}</strong><span>每月预算</span></div></div>
+        <p className="backup-warning">恢复后，当前分类、预算和账单会被备份内容替换。建议先导出一份当前数据。</p>
+        <div className="backup-restore-actions"><button type="button" onClick={() => setPendingBackup(null)}>暂不恢复</button><button data-testid="confirm-restore" type="button" onClick={restoreBackup}>确认恢复</button></div>
       </div> : null}
     </BottomSheet>
     <BottomSheet open={Boolean(editing)} onOpenChange={(open) => { if (!open) setEditing(null); }} title="编辑这笔记录" description="修改后会立刻更新本月统计" snap={0.74}>
