@@ -13,6 +13,7 @@ type Tab = "home" | "add" | "analysis" | "profile";
 type CategoryId = string;
 type CategoryIconKey = "food" | "transport" | "study" | "shopping" | "fun" | "other" | "health" | "pet" | "travel" | "digital" | "favorite" | "sparkle";
 type Transaction = { id: string; amount: number; category: CategoryId; note: string; date: string };
+type EditingTransaction = Transaction & { amountInput: string };
 type CategoryDefinition = { id: CategoryId; label: string; color: string; soft: string; icon: CategoryIconKey; builtIn: boolean };
 type CategoryDraft = { id?: CategoryId; label: string; budget: string; icon: CategoryIconKey; color: string; soft: string };
 type BackupPayload = {
@@ -129,8 +130,20 @@ function parseBackupPayload(input: unknown): BackupPayload | null {
   }
   return { app: "xiaohebao", version: 1, exportedAt: envelope.exportedAt, data: { categories, transactions, budgets, monthlyBudget: raw.monthlyBudget, month: raw.month } };
 }
-function currency(value: number) { return `¥${Math.round(value).toLocaleString("zh-CN")}`; }
+function currency(value: number) {
+  return `¥${value.toLocaleString("zh-CN", { minimumFractionDigits: Number.isInteger(value) ? 0 : 2, maximumFractionDigits: 2 })}`;
+}
 function monthKey(date: string) { return date.slice(0, 7); }
+function todayKey() {
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+}
+function normalizeMoneyInput(value: string) {
+  const cleaned = value.replace(/[^0-9.]/g, "");
+  const [whole = "", ...decimalParts] = cleaned.split(".");
+  if (!cleaned.includes(".")) return whole;
+  return `${whole}.${decimalParts.join("").slice(0, 2)}`;
+}
 function shiftMonth(value: string, amount: number) {
   const [year, month] = value.split("-").map(Number);
   const next = new Date(year, month - 1 + amount, 1);
@@ -160,9 +173,9 @@ export default function Prototype() {
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState<CategoryId>("food");
   const [note, setNote] = useState("");
-  const [date, setDate] = useState("2026-10-02");
+  const [date, setDate] = useState(todayKey);
   const [selectedCategory, setSelectedCategory] = useState<CategoryId | null>(null);
-  const [editing, setEditing] = useState<Transaction | null>(null);
+  const [editing, setEditing] = useState<EditingTransaction | null>(null);
   const [categoryDraft, setCategoryDraft] = useState<CategoryDraft | null>(null);
   const [deleteCategoryArmed, setDeleteCategoryArmed] = useState(false);
   const [pendingBackup, setPendingBackup] = useState<PendingBackup | null>(null);
@@ -194,7 +207,11 @@ export default function Prototype() {
   const progress = totalBudget ? Math.min(100, Math.round((spent / totalBudget) * 100)) : 0;
   const sortedCategories = [...categoryIds].sort((a, b) => totals[b] - totals[a]);
 
-  const navigate = (next: Tab) => { keyboard.hide(); setTab(next); resetDeviceViewport(); };
+  const navigate = (next: Tab) => {
+    keyboard.hide();
+    if (next === "add" && tab !== "add") setDate(todayKey());
+    setTab(next); resetDeviceViewport();
+  };
   const openCategoryDetails = (id: CategoryId) => { keyboard.hide(); setSelectedCategory(id); };
   const openCategoryEditor = (id?: CategoryId) => {
     keyboard.hide(); setDeleteCategoryArmed(false);
@@ -206,7 +223,8 @@ export default function Prototype() {
     const color = CATEGORY_COLORS[categories.length % CATEGORY_COLORS.length];
     setCategoryDraft({ label: "", budget: "0", icon: "sparkle", color: color.color, soft: color.soft });
   };
-  const editFromCategoryDetails = (item: Transaction) => { setSelectedCategory(null); setEditing(item); };
+  const startEditing = (item: Transaction) => setEditing({ ...item, amountInput: String(item.amount) });
+  const editFromCategoryDetails = (item: Transaction) => { setSelectedCategory(null); startEditing(item); };
   const submitExpense = () => {
     const numeric = Number(amount);
     if (!numeric || numeric <= 0) { setToast("请输入有效金额"); return; }
@@ -214,8 +232,12 @@ export default function Prototype() {
     setAmount(""); setNote(""); setMonth(monthKey(date)); keyboard.hide(); setTab("home"); resetDeviceViewport(); setToast("已记一笔");
   };
   const saveEdit = () => {
-    if (!editing || editing.amount <= 0) return;
-    setTransactions((current) => current.map((item) => item.id === editing.id ? editing : item));
+    if (!editing) return;
+    const numeric = Number(editing.amountInput);
+    if (!Number.isFinite(numeric) || numeric <= 0) { setToast("请输入有效金额"); return; }
+    const { amountInput: _amountInput, ...record } = editing;
+    const updated: Transaction = { ...record, amount: numeric };
+    setTransactions((current) => current.map((item) => item.id === editing.id ? updated : item));
     setEditing(null); keyboard.hide(); setToast("记录已更新");
   };
   const removeEdit = () => {
@@ -332,7 +354,7 @@ export default function Prototype() {
       <div className="transaction-list">
         {monthlyTransactions.length ? monthlyTransactions.slice(0, 8).map((item) => {
           const meta = categoryMeta[item.category]; const Icon = meta.Icon;
-          return <button className="transaction-row glass-card" type="button" key={item.id} onClick={() => setEditing(item)}>
+          return <button className="transaction-row glass-card" type="button" key={item.id} onClick={() => startEditing(item)}>
             <span className="transaction-icon" style={{ color: meta.color, backgroundColor: meta.soft }}><Icon size={18} weight="fill" /></span>
             <span className="transaction-copy"><strong>{item.note}</strong><small>{meta.label} · {shortDate(item.date)}</small></span>
             <strong className="transaction-amount">-{currency(item.amount)}</strong>
@@ -347,13 +369,13 @@ export default function Prototype() {
       <header className="page-header centered-header"><div><p className="eyebrow">快速记录</p><h1>记一笔</h1></div></header>
       <article className="glass-card amount-card">
         <label htmlFor="amount">花了多少</label>
-        <div className="amount-input-wrap"><span>¥</span><KeyboardInput id="amount" data-testid="expense-amount" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value.replace(/[^0-9.]/g, ""))} placeholder="0.00" aria-label="支出金额" /></div>
+        <div className="amount-input-wrap"><span>¥</span><KeyboardInput id="amount" data-testid="expense-amount" inputMode="decimal" value={amount} onChange={(event) => setAmount(normalizeMoneyInput(event.target.value))} placeholder="0.00" aria-label="支出金额" /></div>
         <p>先记下来，月底就不会猜钱去哪了。</p>
       </article>
       <div className="form-section"><h2>花在哪一类</h2><div className="category-picker">
         {categoryIds.map((id) => {
           const meta = categoryMeta[id]; const Icon = meta.Icon; const selected = category === id;
-          return <button className="category-choice" data-selected={selected} type="button" key={id} onClick={() => setCategory(id)} style={{ "--category-color": meta.color, "--category-soft": meta.soft } as CSSProperties}>
+          return <button className="category-choice" data-selected={selected} type="button" key={id} onClick={() => { keyboard.hide(); setCategory(id); }} style={{ "--category-color": meta.color, "--category-soft": meta.soft } as CSSProperties}>
             <span><Icon size={22} weight="fill" /></span>{meta.label}{selected ? <Check className="choice-check" size={13} weight="bold" /> : null}
           </button>;
         })}
@@ -476,7 +498,7 @@ export default function Prototype() {
     </BottomSheet>
     <BottomSheet open={Boolean(editing)} onOpenChange={(open) => { if (!open) setEditing(null); }} title="编辑这笔记录" description="修改后会立刻更新本月统计" snap={0.74}>
       {editing ? <div className="edit-form">
-        <label>金额<KeyboardInput inputMode="decimal" value={editing.amount} onChange={(event) => setEditing({ ...editing, amount: Number(event.target.value) || 0 })} /></label>
+        <label>金额<KeyboardInput data-testid="edit-expense-amount" inputMode="decimal" value={editing.amountInput} onChange={(event) => setEditing({ ...editing, amountInput: normalizeMoneyInput(event.target.value) })} /></label>
         <label>备注<KeyboardInput value={editing.note} onChange={(event) => setEditing({ ...editing, note: event.target.value })} /></label>
         <label>日期<KeyboardInput type="date" value={editing.date} onChange={(event) => setEditing({ ...editing, date: event.target.value })} /></label>
         <div className="edit-categories">{categoryIds.map((id) => { const meta = categoryMeta[id]; const Icon = meta.Icon; return <button key={id} type="button" data-selected={editing.category === id} onClick={() => setEditing({ ...editing, category: id })}><Icon size={17} weight="fill" />{meta.label}</button>; })}</div>
